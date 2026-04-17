@@ -9,3 +9,4 @@ _site/
 .env
 key.json
 service-account*.json
+.DS_Store
