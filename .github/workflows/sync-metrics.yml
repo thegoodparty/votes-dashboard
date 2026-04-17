@@ -41,3 +41,4 @@ jobs:
           git add data.json
           git commit -m "chore(data): sync VOTES metrics $(date -u +%Y-%m-%d)"
           git push
+
