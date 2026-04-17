@@ -1,0 +1,50 @@
+{
+  "metrics": [
+    {
+      "id": "V",
+      "label": "Velocity",
+      "unit": "pts/sprint",
+      "direction": "up",
+      "goal_value": 187,
+      "goal_date": "2026-09-30",
+      "description": "Rolling mean of points per sprint across Win + Serve + Data teams, last 2 completed sprints per team."
+    },
+    {
+      "id": "O",
+      "label": "Operations",
+      "unit": "hrs",
+      "direction": "down",
+      "goal_value": 12,
+      "goal_date": "2026-09-30",
+      "description": "Mean Time to Deploy in hours, 4-week rolling average. Source: swain.github.io/deploy-metrics/"
+    },
+    {
+      "id": "T",
+      "label": "Testing",
+      "unit": "bugs/wk",
+      "direction": "down",
+      "goal_value": 6,
+      "goal_date": "2026-09-30",
+      "description": "New Bug-typed tasks created per week in Engineering + Data spaces, 4-week rolling average."
+    },
+    {
+      "id": "E",
+      "label": "Experience",
+      "unit": null,
+      "direction": null,
+      "goal_value": null,
+      "goal_date": null,
+      "status": "pending_pmf",
+      "description": "Paused until product team confirms PMF sufficient for measurement."
+    },
+    {
+      "id": "S",
+      "label": "Security",
+      "unit": "score",
+      "direction": "up",
+      "goal_value": 750,
+      "goal_date": "2026-10-01",
+      "description": "SensCy IntelliBoard Cyberhealth score. Baseline: 197 on 2026-02-16."
+    }
+  ]
+}

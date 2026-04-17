@@ -1,0 +1,256 @@
+:root {
+  --bg: #fafaf9;
+  --card-bg: #ffffff;
+  --border: #e5e5e2;
+  --text: #1a1a1a;
+  --text-muted: #6b6b68;
+  --text-faint: #9a9a96;
+  --accent: #2563eb;
+  --accent-muted: rgba(37, 99, 235, 0.12);
+  --goal: #16a34a;
+  --goal-muted: rgba(22, 163, 74, 0.12);
+  --warn: #dc2626;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Header ---------- */
+
+.page-header {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px 32px 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.page-header-inner h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.range-selector {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.range-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: background 0.15s, color 0.15s;
+}
+
+.range-btn:last-child {
+  border-right: none;
+}
+
+.range-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.range-btn.active {
+  background: var(--text);
+  color: var(--card-bg);
+}
+
+/* ---------- Grid ---------- */
+
+.grid {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 32px 40px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 20px;
+}
+
+/* ---------- Card ---------- */
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.card-id {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.card-current {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.card-current-value {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-current-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.card-goal {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.card-goal-value {
+  font-weight: 600;
+  color: var(--goal);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-chart-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 180px;
+}
+
+.card-chart-wrap canvas {
+  max-height: 100%;
+}
+
+/* Placeholder for E (pending PMF) or any non-numeric metric */
+.card-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  min-height: 180px;
+}
+
+.card-description {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* ---------- Footer ---------- */
+
+.page-footer {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 32px 40px;
+  color: var(--text-faint);
+  font-size: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.page-footer .sep {
+  color: var(--border);
+}
+
+.page-footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.page-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 640px) {
+  .page-header {
+    padding: 24px 16px 16px;
+  }
+  .grid {
+    padding: 0 16px 24px;
+    grid-template-columns: 1fr;
+  }
+  .card {
+    padding: 16px 18px;
+  }
+}
+
+/* ---------- Error state ---------- */
+
+.load-error {
+  max-width: 720px;
+  margin: 80px auto;
+  padding: 24px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: rgba(220, 38, 38, 0.04);
+  color: var(--warn);
+  font-size: 13px;
+}

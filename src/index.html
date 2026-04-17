@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>VOTES Metrics · GoodParty.org Engineering</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="chart.umd.js"></script>
+</head>
+<body>
+  <header class="page-header">
+    <div class="page-header-inner">
+      <h1>VOTES Metrics</h1>
+      <p class="subtitle">GoodParty.org Engineering · Weekly quality signals for the VOTES framework.</p>
+    </div>
+    <div class="range-selector" role="group" aria-label="Time range">
+      <button data-range="4" class="range-btn">4w</button>
+      <button data-range="12" class="range-btn">12w</button>
+      <button data-range="all" class="range-btn active">All</button>
+    </div>
+  </header>
+
+  <main id="grid" class="grid"></main>
+
+  <footer class="page-footer">
+    <span id="last-updated">Loading…</span>
+    <span class="sep">·</span>
+    <span>VOTES = Velocity, Operations, Testing, Experience, Security</span>
+    <span class="sep">·</span>
+    <a href="https://github.com/goodpartyorg/votes-dashboard" target="_blank" rel="noopener">Source</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
