@@ -8,6 +8,10 @@ on:
       - 'data.json'
       - 'metrics-config.json'
       - '.github/workflows/pages.yml'
+  workflow_run:
+    workflows: ["Sync VOTES metrics from Drive"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -21,9 +25,16 @@ concurrency:
 
 jobs:
   build:
+    # Skip if triggered by a sync workflow that didn't succeed
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # When triggered via workflow_run, the default ref is the workflow file's ref,
+          # not the commit the sync workflow produced. Explicitly check out main to get
+          # the freshly-committed data.json.
+          ref: main
 
       - name: Assemble site
         run: |
