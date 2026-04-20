@@ -1,30 +1,36 @@
 {
-  "generated_at": "2026-04-17T17:17:48.184Z",
+  "generated_at": "2026-04-20T16:27:28.186Z",
   "weeks": [
-    "2026-04-17"
+    "2026-04-17",
+    "2026-04-20"
   ],
   "series": {
     "E": [
+      null,
       null
     ],
     "O": [
+      30,
       30
     ],
     "S": [
+      452,
       452
     ],
     "T": [
-      11
+      11,
+      13
     ],
     "V": [
+      150,
       150
     ]
   },
   "metric_labels_from_sheet": {
-    "V": "V - Velocity (rolling mean pts/sprint, all eng)",
-    "O": "O - Operations (Mean TTD hours, 4-wk rolling avg)",
-    "T": "T - Testing (new bugs/week, 4-wk rolling avg)",
+    "V": "V - Velocity",
+    "O": "O - Operations",
+    "T": "T - Testing",
     "E": "E - Experience",
-    "S": "S - Security (SensCy score)"
+    "S": "S - Security"
   }
 }
