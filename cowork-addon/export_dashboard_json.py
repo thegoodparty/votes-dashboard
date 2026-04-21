@@ -2,12 +2,16 @@
 """
 export_dashboard_json.py
 
-Runs inside Cowork after `VOTES Metrics.xlsx` is saved. Reads all tabs, assembles
-a data.json with per-metric time series, writes it to the same project folder.
+Runs inside Cowork after `VOTES Metrics.xlsx` is saved. Reads the workbook,
+assembles a data.json with per-metric time series, writes it to the same
+project folder.
 
-The dashboard repo's GitHub Action then pulls this data.json, validates it, and
-commits it on a weekly cron. If this script fails, the xlsx remains the source
-of truth and the Action's fallback path will parse the xlsx directly.
+Prefers the 'raw data' tab (single-sheet layout with one row per week).
+Falls back to iterating date-named tabs if 'raw data' is missing.
+
+The dashboard repo's GitHub Action consumes this file. If this script fails,
+the xlsx remains the source of truth and the Action's fallback path will
+parse the xlsx directly.
 
 Contract (do not change without also updating the dashboard repo):
 
@@ -22,7 +26,7 @@ Contract (do not change without also updating the dashboard repo):
       "S": [<number|null>, ...]
     },
     "metric_labels_from_sheet": {
-      "V": "V - Velocity (...)",
+      "V": "V - Velocity",
       ...
     }
   }
@@ -38,7 +42,104 @@ from openpyxl import load_workbook
 WORKBOOK_PATH = Path("VOTES Metrics.xlsx")
 OUTPUT_PATH = Path("data.json")
 REQUIRED_IDS = {"V", "O", "T", "E", "S"}
+RAW_DATA_SHEET_NAME = "raw data"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def coerce_number(raw):
+    """Return int/float for numeric-looking values, None otherwise."""
+    if isinstance(raw, (int, float)):
+        return int(raw) if float(raw).is_integer() else float(raw)
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return int(val) if val.is_integer() else val
+
+
+def extract_metric_id(label):
+    """'V - Velocity' -> 'V', else None."""
+    m = re.match(r"^([A-Z])\s*-\s*", str(label or ""))
+    return m.group(1) if m else None
+
+
+def find_raw_data_sheet(wb):
+    """Case-insensitive match for 'raw data' tab, or None."""
+    for name in wb.sheetnames:
+        if name.strip().lower() == RAW_DATA_SHEET_NAME:
+            return wb[name]
+    return None
+
+
+def parse_raw_data(ws):
+    """
+    Parse the 'raw data' sheet.
+    Expected layout: Date | V - ... | O - ... | T - ... | E - ... | S - ...
+    Returns (per_week, labels) or raises ValueError.
+    """
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise ValueError("'raw data' sheet is empty")
+
+    header = rows[0]
+    col_to_mid = {}
+    labels = {}
+    for idx, cell in enumerate(header):
+        if idx == 0:
+            continue  # date column
+        mid = extract_metric_id(cell)
+        if mid is None:
+            print(f"[export_dashboard_json] 'raw data' header col {idx} {cell!r} has no 'X - ' prefix; ignoring")
+            continue
+        col_to_mid[idx] = mid
+        labels[mid] = str(cell)
+
+    if not col_to_mid:
+        raise ValueError("'raw data' sheet has no recognized metric columns")
+
+    per_week = {}
+    for r in rows[1:]:
+        if not r or r[0] is None:
+            continue
+        date_str = str(r[0]).strip()
+        if not DATE_RE.fullmatch(date_str):
+            print(f"[export_dashboard_json] 'raw data' row with non-ISO date {date_str!r}; skipping")
+            continue
+        week_values = {}
+        for col_idx, mid in col_to_mid.items():
+            week_values[mid] = coerce_number(r[col_idx]) if col_idx < len(r) else None
+        per_week[date_str] = week_values
+
+    if not per_week:
+        raise ValueError("'raw data' sheet has no data rows")
+
+    return per_week, labels
+
+
+def parse_date_tabs(wb):
+    """Fallback: parse every YYYY-MM-DD tab, using column A=metric, C=current."""
+    per_week = {}
+    labels = {}
+    for name in wb.sheetnames:
+        if not DATE_RE.fullmatch(name):
+            print(f"[export_dashboard_json] skipping non-date sheet: {name!r}")
+            continue
+        ws = wb[name]
+        week_values = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or len(row) < 3:
+                continue
+            metric_name = row[0]
+            current = row[2]
+            if not metric_name:
+                continue
+            mid = extract_metric_id(metric_name)
+            if mid is None:
+                continue
+            labels.setdefault(mid, str(metric_name))
+            week_values[mid] = coerce_number(current)
+        per_week[name] = week_values
+    return per_week, labels
 
 
 def main():
@@ -47,49 +148,27 @@ def main():
 
     wb = load_workbook(WORKBOOK_PATH, data_only=True)
 
-    per_week = {}        # week -> {metric_id: value|None}
-    labels = {}          # metric_id -> label from column A (first seen)
-
-    for name in wb.sheetnames:
-        if not DATE_RE.fullmatch(name):
-            print(f"[export_dashboard_json] skipping non-date sheet: {name!r}")
-            continue
-        ws = wb[name]
-        week_values = {}
-        # Rows 2..onward (row 1 is header); columns A=metric, C=current
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or len(row) < 3:
-                continue
-            metric_name = row[0]
-            current = row[2]
-            if not metric_name:
-                continue
-            m = re.match(r"^([A-Z])\s*-\s*", str(metric_name))
-            if not m:
-                continue
-            mid = m.group(1)
-            labels.setdefault(mid, str(metric_name))
-            # Coerce to number; anything non-numeric (incl. "N/A (awaiting PMF)") -> None
-            if isinstance(current, (int, float)):
-                val = int(current) if float(current).is_integer() else float(current)
-            else:
-                try:
-                    f = float(current)
-                    val = int(f) if f.is_integer() else f
-                except (TypeError, ValueError):
-                    val = None
-            week_values[mid] = val
-        per_week[name] = week_values
+    # Prefer 'raw data' tab, fall back to date tabs
+    raw_ws = find_raw_data_sheet(wb)
+    if raw_ws is not None:
+        print(f"[export_dashboard_json] using {raw_ws.title!r} tab (single-sheet layout).")
+        try:
+            per_week, labels = parse_raw_data(raw_ws)
+        except ValueError as e:
+            print(f"[export_dashboard_json] {raw_ws.title!r} tab unusable ({e}); falling back to date tabs.")
+            per_week, labels = parse_date_tabs(wb)
+    else:
+        print("[export_dashboard_json] no 'raw data' tab; using date tabs (fallback layout).")
+        per_week, labels = parse_date_tabs(wb)
 
     if not per_week:
-        sys.exit("[export_dashboard_json] no date-named tabs found in workbook")
+        sys.exit("[export_dashboard_json] no data found in workbook")
 
     weeks_sorted = sorted(per_week.keys())
 
-    # Self-check: every week must have every required metric ID row present
-    # (value can be None for E or for carry-forward failures — structure still must exist).
-    # Aborting here prevents overwriting the existing Drive data.json with incomplete data;
-    # the dashboard Action will fall back to parsing the xlsx directly if needed.
+    # Self-check: every week must have every required metric ID.
+    # Aborting here prevents overwriting Drive's data.json with incomplete data;
+    # the dashboard Action will fall back to parsing the xlsx directly.
     for week, mvals in per_week.items():
         missing = REQUIRED_IDS - set(mvals.keys())
         if missing:
@@ -98,7 +177,6 @@ def main():
                 f"{sorted(missing)}. Aborting without overwriting data.json."
             )
 
-    # Build aligned series
     all_ids = sorted(REQUIRED_IDS | set(labels.keys()))
     series = {
         mid: [per_week[w].get(mid) for w in weeks_sorted]

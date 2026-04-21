@@ -75,9 +75,136 @@ def col_to_idx(ref):
     return idx - 1
 
 
+RAW_DATA_SHEET_NAME = "raw data"
+
+
+def _read_sheet_rows(z, sheet_path, shared):
+    """Read a single sheet's cells, returning a list of row dicts: {col_idx: value}."""
+    with z.open(sheet_path) as f:
+        sheet_root = ET.parse(f).getroot()
+    sheet_data = sheet_root.find("s:sheetData", SPREADSHEET_NS)
+
+    rows = []
+    for row in sheet_data.findall("s:row", SPREADSHEET_NS):
+        cells = {}
+        for c in row.findall("s:c", SPREADSHEET_NS):
+            ref = c.get("r")
+            t = c.get("t")
+            v_elem = c.find("s:v", SPREADSHEET_NS)
+            is_elem = c.find("s:is", SPREADSHEET_NS)
+            if t == "s" and v_elem is not None:
+                val = shared[int(v_elem.text)]
+            elif t == "inlineStr" and is_elem is not None:
+                t_sub = is_elem.find("s:t", SPREADSHEET_NS)
+                val = t_sub.text if t_sub is not None else ""
+            elif v_elem is not None:
+                val = v_elem.text
+            else:
+                val = ""
+            cells[col_to_idx(ref)] = val
+        rows.append(cells)
+    return rows
+
+
+def _coerce_number(raw):
+    """Return int/float for numeric-looking values, None otherwise."""
+    try:
+        val = float(raw)
+    except (ValueError, TypeError):
+        return None
+    return int(val) if val.is_integer() else val
+
+
+def _extract_metric_id(label):
+    """Return the 'V' in 'V - Velocity (...)' or None if no match."""
+    m = re.match(r"^([A-Z])\s*-\s*", label or "")
+    return m.group(1) if m else None
+
+
+def _parse_raw_data_sheet(z, sheet_path, shared):
+    """
+    Parse a 'raw data' tab with layout:
+      Date | V - Velocity | O - Operations | T - Testing | E - Experience | S - Security
+      YYYY-MM-DD | ...values...
+
+    Returns (weeks_sorted, series_by_id, labels_by_id) or raises ValueError on bad shape.
+    """
+    rows = _read_sheet_rows(z, sheet_path, shared)
+    if not rows:
+        raise ValueError("'raw data' sheet is empty")
+
+    header = rows[0]
+    # Column 0 is the date column; columns 1..N are metrics.
+    col_to_mid = {}          # column index -> metric id
+    labels_by_id = {}        # metric id -> header label
+    for col_idx in sorted(header.keys()):
+        if col_idx == 0:
+            continue
+        label = str(header[col_idx] or "")
+        mid = _extract_metric_id(label)
+        if mid is None:
+            print(f"[warn] 'raw data' header col {col_idx} {label!r} has no 'X - ' prefix; ignoring")
+            continue
+        col_to_mid[col_idx] = mid
+        labels_by_id[mid] = label
+
+    if not col_to_mid:
+        raise ValueError("'raw data' sheet has no recognized metric columns")
+
+    per_week = {}  # date -> {mid: value}
+    for r in rows[1:]:
+        date_raw = str(r.get(0, "") or "").strip()
+        if not date_raw:
+            continue
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_raw):
+            print(f"[warn] 'raw data' row with non-ISO date {date_raw!r}; skipping")
+            continue
+        week_values = {}
+        for col_idx, mid in col_to_mid.items():
+            week_values[mid] = _coerce_number(r.get(col_idx, ""))
+        per_week[date_raw] = week_values
+
+    if not per_week:
+        raise ValueError("'raw data' sheet has no data rows")
+
+    weeks_sorted = sorted(per_week.keys())
+    all_ids = sorted(labels_by_id.keys())
+    series = {mid: [per_week[w].get(mid) for w in weeks_sorted] for mid in all_ids}
+    return weeks_sorted, series, labels_by_id
+
+
+def _parse_date_tabs(z, date_sheets, shared):
+    """Fallback: parse each date-named tab as one week."""
+    weeks = []
+    per_week_values = {}
+    labels_by_id = {}
+
+    for sheet_name, sheet_path in date_sheets:
+        rows = _read_sheet_rows(z, sheet_path, shared)
+        week_values = {}
+        for r in rows[1:]:
+            metric_name = r.get(0, "")
+            current = r.get(2, "")  # column C
+            if not metric_name:
+                continue
+            mid = _extract_metric_id(str(metric_name))
+            if mid is None:
+                continue
+            labels_by_id.setdefault(mid, str(metric_name))
+            week_values[mid] = _coerce_number(current)
+        weeks.append(sheet_name)
+        per_week_values[sheet_name] = week_values
+
+    weeks_sorted = sorted(set(weeks))
+    all_ids = sorted(labels_by_id.keys())
+    series = {mid: [per_week_values[w].get(mid) for w in weeks_sorted] for mid in all_ids}
+    return weeks_sorted, series, labels_by_id
+
+
 def parse_xlsx(xlsx_bytes):
     """
-    Parse all tabs in the workbook. Each tab is a week (sheet name is YYYY-MM-DD).
+    Parse the workbook. Prefers the 'raw data' tab (layout: Date | V | O | T | E | S).
+    Falls back to per-date tabs if 'raw data' is missing or malformed.
     Returns (weeks_sorted, series_by_id, labels_by_id).
     """
     z = zipfile.ZipFile(io.BytesIO(xlsx_bytes))
@@ -121,75 +248,30 @@ def parse_xlsx(xlsx_bytes):
             t = si.find("s:t", SPREADSHEET_NS)
             shared.append(t.text if t is not None else "")
 
-    # Parse each sheet
-    weeks = []
-    per_week_values = {}  # week -> {metric_id: value_or_None}
-    labels_by_id = {}     # metric_id -> first-seen label string from column A
+    # Prefer 'raw data' tab (case-insensitive match)
+    raw_data_sheet = next(
+        ((n, p) for n, p in sheets if n.strip().lower() == RAW_DATA_SHEET_NAME),
+        None,
+    )
+    if raw_data_sheet is not None:
+        name, path = raw_data_sheet
+        print(f"Using {name!r} tab (single-sheet layout).")
+        try:
+            return _parse_raw_data_sheet(z, path, shared)
+        except ValueError as e:
+            print(f"[warn] {name!r} tab unusable ({e}); falling back to date tabs.")
 
-    for sheet_name, sheet_path in sheets:
-        # Expect sheet_name to be YYYY-MM-DD
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", sheet_name):
-            print(f"[warn] skipping sheet with non-date name: {sheet_name!r}")
-            continue
-
-        with z.open(sheet_path) as f:
-            sheet_root = ET.parse(f).getroot()
-        sheet_data = sheet_root.find("s:sheetData", SPREADSHEET_NS)
-
-        rows = []
-        for row in sheet_data.findall("s:row", SPREADSHEET_NS):
-            cells = {}
-            for c in row.findall("s:c", SPREADSHEET_NS):
-                ref = c.get("r")
-                t = c.get("t")
-                v_elem = c.find("s:v", SPREADSHEET_NS)
-                is_elem = c.find("s:is", SPREADSHEET_NS)
-                if t == "s" and v_elem is not None:
-                    val = shared[int(v_elem.text)]
-                elif t == "inlineStr" and is_elem is not None:
-                    t_sub = is_elem.find("s:t", SPREADSHEET_NS)
-                    val = t_sub.text if t_sub is not None else ""
-                elif v_elem is not None:
-                    val = v_elem.text
-                else:
-                    val = ""
-                cells[col_to_idx(ref)] = val
-            rows.append(cells)
-
-        week_values = {}
-        # Skip row 0 (header); rows 1..5 are metrics
-        for r in rows[1:]:
-            metric_name = r.get(0, "")
-            current = r.get(2, "")  # column C
-            if not metric_name:
-                continue
-            # Metric ID = first character before " - "
-            m = re.match(r"^([A-Z])\s*-\s*", metric_name)
-            if not m:
-                continue
-            metric_id = m.group(1)
-            labels_by_id.setdefault(metric_id, metric_name)
-            # Parse numeric value; non-numeric becomes None
-            try:
-                val = float(current)
-                # prefer int if it's whole
-                if val.is_integer():
-                    val = int(val)
-                week_values[metric_id] = val
-            except (ValueError, TypeError):
-                week_values[metric_id] = None
-
-        weeks.append(sheet_name)
-        per_week_values[sheet_name] = week_values
-
-    # Sort weeks chronologically
-    weeks_sorted = sorted(set(weeks))
-
-    # Build series (one array per metric ID, aligned to weeks_sorted)
-    all_ids = sorted(labels_by_id.keys())
-    series = {mid: [per_week_values[w].get(mid) for w in weeks_sorted] for mid in all_ids}
-
-    return weeks_sorted, series, labels_by_id
+    # Fallback: iterate date-named tabs
+    date_sheets = [
+        (n, p) for n, p in sheets
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", n)
+    ]
+    if not date_sheets:
+        raise ValueError(
+            "No 'raw data' tab and no date-named tabs found in workbook."
+        )
+    print(f"Using {len(date_sheets)} date-named tabs (fallback layout).")
+    return _parse_date_tabs(z, date_sheets, shared)
 
 
 # ---------- Validation ----------
